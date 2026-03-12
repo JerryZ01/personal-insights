@@ -1,0 +1,27 @@
+# Core dependencies
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=5.1.0
+
+# Data analysis
+networkx>=3.2
+pyvis>=0.3.2
+
+# Visualization
+matplotlib>=3.8.0
+plotly>=5.18.0
+
+# CLI
+click>=8.1.0
+
+# Encryption (for future use)
+cryptography>=42.0.0
+
+# Testing
+pytest>=8.0.0
+pytest-cov>=4.1.0
+
+# Development
+black>=24.1.0
+flake8>=7.0.0
+mypy>=1.8.0
