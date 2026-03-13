@@ -53,22 +53,96 @@ def cmd_report(args):
 
 
 def cmd_health(args):
-    """健康检查"""
+    """健康检查 - 增强版"""
     analyzer = BookmarkAnalyzer(args.input)
     analyzer.load()
     
     health = analyzer.health_check()
     
     print(f"\n🏥 书签健康检查\n")
-    print(f"总书签：{health['total']}")
-    print(f"唯一 URL: {health['unique_urls']}")
-    print(f"\n✅ 重复收藏：{health['duplicates']} 个")
-    print(f"⚠️ 疑似失效：{health['suspicious']} 个")
     
-    if health['duplicate_urls']:
-        print(f"\n📋 重复的 URL:")
-        for url in health['duplicate_urls'][:5]:
-            print(f"  - {url[:60]}...")
+    # 基础统计
+    print(f"📊 基础数据:")
+    print(f"  总书签：{health['total']}")
+    print(f"  唯一 URL: {health['unique_urls']}")
+    
+    # 重复检查
+    print(f"\n🔄 重复检查:")
+    if health['duplicates'] > 0:
+        print(f"  ⚠️  重复收藏：{health['duplicates']} 个")
+        if health.get('duplicate_urls'):
+            print(f"  示例:")
+            for url in health['duplicate_urls'][:3]:
+                print(f"    - {url[:50]}...")
+    else:
+        print(f"  ✅ 无重复收藏")
+    
+    # 死链检查
+    print(f"\n🔗 链接健康:")
+    if health['suspicious'] > 0:
+        print(f"  ⚠️  疑似失效：{health['suspicious']} 个")
+        if health.get('suspicious_urls'):
+            print(f"  示例:")
+            for url in health['suspicious_urls'][:3]:
+                print(f"    - {url[:50]}...")
+    else:
+        print(f"  ✅ 未发现明显失效链接")
+    
+    # 内容质量
+    quality = health.get('quality', {})
+    if quality:
+        print(f"\n⭐ 内容质量:")
+        print(f"  高质量：{quality.get('high_quality', 0)} ({quality.get('high_quality_ratio', 0)}%)")
+        print(f"  中质量：{quality.get('medium_quality', 0)}")
+        print(f"  低质量：{quality.get('low_quality', 0)}")
+        
+        ratio = quality.get('high_quality_ratio', 0)
+        if ratio >= 30:
+            print(f"  ✅ 质量优秀！")
+        elif ratio >= 15:
+            print(f"  👍 质量良好")
+        else:
+            print(f"  💡 建议：多收藏官方文档和高质量资源")
+    
+    # 平台分布
+    platform = health.get('platform_health', {})
+    if platform:
+        print(f"\n🌐 平台分布:")
+        for plat, count in sorted(platform.get('platforms', {}).items(), key=lambda x: -x[1])[:5]:
+            print(f"  {plat}: {count}")
+        diversity = platform.get('diversity', '未知')
+        print(f"  多样性：{diversity}")
+    
+    # 时间健康
+    time_health = health.get('time_health', {})
+    if time_health and isinstance(time_health, dict):
+        print(f"\n📅 学习持续性:")
+        if 'status' in time_health:
+            status = time_health['status']
+            status_icon = '✅' if '持续' in status else '⚠️' if '减缓' in status else '💪'
+            print(f"  状态：{status_icon} {status}")
+        if 'recent_6months_avg' in time_health:
+            print(f"  近 6 个月均：{time_health['recent_6months_avg']} 篇/月")
+        if 'average_per_month' in time_health:
+            print(f"  总月均：{time_health['average_per_month']} 篇/月")
+    
+    # 综合建议
+    print(f"\n💡 综合建议:")
+    suggestions = []
+    if health['duplicates'] > 5:
+        suggestions.append("清理重复收藏，提高管理效率")
+    if quality.get('high_quality_ratio', 0) < 20:
+        suggestions.append("增加官方文档和高质量资源收藏")
+    if platform.get('platform_count', 0) < 3:
+        suggestions.append("拓展学习平台，增加多样性")
+    if time_health.get('recent_6months_avg', 0) < 3:
+        suggestions.append("保持学习节奏，持续积累")
+    
+    if suggestions:
+        for i, sug in enumerate(suggestions, 1):
+            print(f"  {i}. {sug}")
+    else:
+        print(f"  ✅ 收藏习惯很健康，继续保持！")
 
 
 def cmd_skills(args):
@@ -89,16 +163,39 @@ def cmd_skills(args):
 
 
 def cmd_timeline(args):
-    """显示学习轨迹"""
+    """显示学习轨迹 - 增强版"""
     analyzer = BookmarkAnalyzer(args.input)
     analyzer.load()
     
-    timeline = analyzer.analyze_timeline()
+    result = analyzer.analyze_timeline()
+    timeline = result['monthly'] if isinstance(result, dict) and 'monthly' in result else result
+    stats = result.get('stats', {}) if isinstance(result, dict) else {}
+    phases = result.get('phases', []) if isinstance(result, dict) else []
     
     print(f"\n📅 学习轨迹\n")
+    
+    # 显示最近 12 个月
+    print("📊 月度趋势:")
     for date, stats in sorted(timeline.items())[-12:]:
         bar = '█' * min(20, stats['count'] // 2)
-        print(f"{date} | {bar} {stats['count']}篇 - {stats['top_category']}")
+        intensity = stats.get('intensity', '')
+        intensity_icon = '🔥' if intensity == '高' else '📈' if intensity == '中' else '📝'
+        print(f"{date} | {bar} {stats['count']:2d}篇 {intensity_icon} - {stats['top_category']}")
+    
+    # 显示统计信息
+    if stats:
+        print(f"\n📈 学习强度:")
+        print(f"  总月份：{stats.get('total_months', 0)} 个月")
+        print(f"  总收藏：{stats.get('total_bookmarks', 0)} 篇")
+        print(f"  月均收藏：{stats.get('average_per_month', 0)} 篇")
+        print(f"  最高月份：{stats.get('max_in_month', 0)} 篇")
+    
+    # 显示学习阶段
+    if phases:
+        print(f"\n🎯 学习阶段:")
+        for i, phase in enumerate(phases, 1):
+            print(f"  阶段{i}: {phase['period']}")
+            print(f"         主题：{phase['category']} ({phase['count']}篇)")
 
 
 def cmd_github(args):

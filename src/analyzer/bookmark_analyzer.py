@@ -312,8 +312,10 @@ class BookmarkAnalyzer:
         return result
     
     def analyze_timeline(self) -> Dict:
-        """时间线分析"""
+        """时间线分析 - 增强版"""
         timeline_stats = {}
+        monthly_counts = []
+        category_evolution = defaultdict(list)
         
         for date, bookmarks in sorted(self.timeline.items()):
             # 分析这个月的主要领域
@@ -326,26 +328,118 @@ class BookmarkAnalyzer:
                             tech_counter[category] += 1
             
             top_tech = max(tech_counter.items(), key=lambda x: x[1])[0] if tech_counter else '其他'
+            count = len(bookmarks)
+            monthly_counts.append(count)
+            
+            # 记录每个类别的演变
+            for category, cnt in tech_counter.items():
+                category_evolution[category].append((date, cnt))
+            
+            # 计算强度等级
+            intensity = '低'
+            if count >= 20:
+                intensity = '高'
+            elif count >= 10:
+                intensity = '中'
             
             timeline_stats[date] = {
-                'count': len(bookmarks),
+                'count': count,
                 'top_category': top_tech,
                 'categories': dict(tech_counter),
+                'intensity': intensity,
             }
         
-        return timeline_stats
+        # 计算统计信息
+        avg_monthly = sum(monthly_counts) / len(monthly_counts) if monthly_counts else 0
+        max_monthly = max(monthly_counts) if monthly_counts else 0
+        total_bookmarks = sum(monthly_counts)
+        
+        # 识别学习阶段
+        phases = self._identify_learning_phases(timeline_stats)
+        
+        return {
+            'monthly': timeline_stats,
+            'stats': {
+                'total_months': len(monthly_counts),
+                'total_bookmarks': total_bookmarks,
+                'average_per_month': round(avg_monthly, 1),
+                'max_in_month': max_monthly,
+            },
+            'phases': phases,
+            'category_evolution': dict(category_evolution),
+        }
+    
+    def _identify_learning_phases(self, timeline_stats: Dict) -> List[Dict]:
+        """识别学习阶段"""
+        if not timeline_stats:
+            return []
+        
+        phases = []
+        current_phase = None
+        phase_start = None
+        phase_category = None
+        phase_count = 0
+        
+        for date, stats in sorted(timeline_stats.items()):
+            category = stats['top_category']
+            count = stats['count']
+            
+            if current_phase is None:
+                # 开始新阶段
+                current_phase = 1
+                phase_start = date
+                phase_category = category
+                phase_count = count
+            elif category == phase_category:
+                # 继续当前阶段
+                phase_count += count
+            else:
+                # 保存当前阶段，开始新阶段
+                if phase_count >= 5:  # 至少有 5 个收藏才算一个阶段
+                    phases.append({
+                        'period': f"{phase_start} - {date}",
+                        'category': phase_category,
+                        'count': phase_count,
+                        'duration_months': len([d for d in timeline_stats.keys() if phase_start <= d < date]),
+                    })
+                current_phase += 1
+                phase_start = date
+                phase_category = category
+                phase_count = count
+        
+        # 保存最后一个阶段
+        if phase_count >= 5 and phase_category:
+            last_date = list(timeline_stats.keys())[-1]
+            phases.append({
+                'period': f"{phase_start} - {last_date}",
+                'category': phase_category,
+                'count': phase_count,
+                'duration_months': len([d for d in timeline_stats.keys() if d >= phase_start]),
+            })
+        
+        return phases
     
     def health_check(self) -> Dict:
-        """健康检查"""
+        """健康检查 - 增强版"""
         # 检测重复（基于 URL）
         url_counter = Counter([b['url'] for b in self.bookmarks])
         duplicates = {url: count for url, count in url_counter.items() if count > 1}
         
-        # 检测可能的死链（需要网络请求，这里只做简单检查）
+        # 检测可能的死链
         suspicious = []
         for b in self.bookmarks:
-            if '404' in b['name'] or 'not found' in b['name'].lower():
+            name_lower = b['name'].lower()
+            if '404' in name_lower or 'not found' in name_lower or '页面不存在' in name_lower:
                 suspicious.append(b['url'])
+        
+        # 内容质量评估
+        quality_stats = self._assess_content_quality()
+        
+        # 平台分布健康度
+        platform_health = self._assess_platform_health()
+        
+        # 时间分布健康度
+        time_health = self._assess_time_health()
         
         return {
             'total': len(self.bookmarks),
@@ -353,6 +447,100 @@ class BookmarkAnalyzer:
             'duplicates': len(duplicates),
             'duplicate_urls': list(duplicates.keys())[:10],
             'suspicious': len(suspicious),
+            'suspicious_urls': suspicious[:10],
+            'quality': quality_stats,
+            'platform_health': platform_health,
+            'time_health': time_health,
+        }
+    
+    def _assess_content_quality(self) -> Dict:
+        """评估内容质量"""
+        # 基于域名评估质量
+        high_quality_domains = [
+            'github.com', 'docs.python.org', 'developer.mozilla.org',
+            'stackoverflow.com', 'official', 'document'
+        ]
+        medium_quality_domains = [
+            'zhuanlan.zhihu.com', 'cnblogs.com', 'juejin.cn',
+            'cloud.tencent.com', 'developer.aliyun.com'
+        ]
+        
+        high_quality_count = 0
+        medium_quality_count = 0
+        low_quality_count = 0
+        
+        for b in self.bookmarks:
+            domain = b['domain'].lower()
+            name_lower = b['name'].lower()
+            
+            # 高质量：官方文档、GitHub 项目
+            if any(hq in domain for hq in high_quality_domains):
+                high_quality_count += 1
+            # 中等质量：技术博客、云厂商
+            elif any(mq in domain for mq in medium_quality_domains):
+                medium_quality_count += 1
+            # 标题质量检查
+            elif len(name_lower) < 10:
+                low_quality_count += 1
+            else:
+                medium_quality_count += 1
+        
+        total = len(self.bookmarks)
+        return {
+            'high_quality': high_quality_count,
+            'medium_quality': medium_quality_count,
+            'low_quality': low_quality_count,
+            'high_quality_ratio': round(high_quality_count / total * 100, 1) if total > 0 else 0,
+        }
+    
+    def _assess_platform_health(self) -> Dict:
+        """评估平台分布健康度"""
+        platform_counts = defaultdict(int)
+        for b in self.bookmarks:
+            domain = b['domain']
+            if 'github.com' in domain:
+                platform_counts['GitHub'] += 1
+            elif 'zhihu.com' in domain:
+                platform_counts['知乎'] += 1
+            elif 'bilibili.com' in domain:
+                platform_counts['B 站'] += 1
+            elif 'csdn.net' in domain or 'cnblogs.com' in domain:
+                platform_counts['技术博客'] += 1
+            elif any(cloud in domain for cloud in ['tencent.com', 'aliyun.com', 'huaweicloud.com']):
+                platform_counts['云厂商'] += 1
+            else:
+                platform_counts['其他'] += 1
+        
+        # 评估多样性
+        platform_count = len([k for k, v in platform_counts.items() if v > 0])
+        diversity = '丰富' if platform_count >= 5 else '中等' if platform_count >= 3 else '单一'
+        
+        return {
+            'platforms': dict(platform_counts),
+            'platform_count': platform_count,
+            'diversity': diversity,
+        }
+    
+    def _assess_time_health(self) -> Dict:
+        """评估时间分布健康度"""
+        if not self.timeline:
+            return {'status': '无时间数据'}
+        
+        monthly_counts = [len(bookmarks) for bookmarks in self.timeline.values()]
+        avg_count = sum(monthly_counts) / len(monthly_counts)
+        
+        # 检查学习持续性
+        recent_months = list(self.timeline.items())[-6:]
+        recent_total = sum(len(b) for _, b in recent_months)
+        recent_avg = recent_total / len(recent_months) if recent_months else 0
+        
+        status = '持续学习' if recent_avg >= 5 else '学习减缓' if recent_avg >= 2 else '需要加油'
+        
+        return {
+            'average_per_month': round(avg_count, 1),
+            'recent_6months_avg': round(recent_avg, 1),
+            'status': status,
+            'total_months': len(self.timeline),
         }
     
     def generate_report(self) -> str:
@@ -415,9 +603,27 @@ class BookmarkAnalyzer:
 ## 📅 学习轨迹
 
 """
-        recent_months = list(timeline_stats.items())[-6:]
-        for date, stats in recent_months:
-            report += f"**{date}**: {stats['count']}篇 - 主要关注：{stats['top_category']}\n"
+        # 支持新旧两种时间线格式
+        if isinstance(timeline_stats, dict) and 'monthly' in timeline_stats:
+            # 新格式
+            monthly = timeline_stats['monthly']
+            stats_summary = timeline_stats.get('stats', {})
+            phases = timeline_stats.get('phases', [])
+            
+            recent_months = list(monthly.items())[-6:]
+            for date, stats in recent_months:
+                report += f"**{date}**: {stats['count']}篇 - 主要关注：{stats['top_category']}\n"
+            
+            # 添加学习阶段
+            if phases:
+                report += f"\n### 学习阶段\n\n"
+                for i, phase in enumerate(phases, 1):
+                    report += f"**阶段{i}**: {phase['period']} - {phase['category']} ({phase['count']}篇)\n"
+        else:
+            # 旧格式兼容
+            recent_months = list(timeline_stats.items())[-6:]
+            for date, stats in recent_months:
+                report += f"**{date}**: {stats['count']}篇 - 主要关注：{stats['top_category']}\n"
         
         report += f"""
 ---
