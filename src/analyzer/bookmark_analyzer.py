@@ -60,6 +60,7 @@ class BookmarkAnalyzer:
         'Transformer': '深度学习',
         'Attention': '深度学习',
         'FlashAttention': '深度学习',
+        'FlashMLA': '深度学习',
         'LLM': '大模型',
         '大模型': '大模型',
         'LangChain': '大模型',
@@ -69,6 +70,8 @@ class BookmarkAnalyzer:
         'LoRA': '大模型',
         'vLLM': '大模型推理',
         'SGLang': '大模型推理',
+        '多模态': '大模型',
+        'AIGC': '大模型',
         
         # 深度学习框架
         'PyTorch': '深度学习框架',
@@ -81,12 +84,18 @@ class BookmarkAnalyzer:
         'Docker': '云计算',
         'OpenStack': '云计算',
         'CVM': '云计算',
+        '容器': '云计算',
+        '微服务': '云计算',
         
         # 编程语言
         'Python': '编程语言',
         'Java': '编程语言',
         'C++': '编程语言',
         'AscendC': '编程语言',
+        'Go': '编程语言',
+        'JavaScript': '编程语言',
+        'TypeScript': '编程语言',
+        'Shell': '编程语言',
         
         # 硬件/芯片
         '昇腾': 'AI 芯片',
@@ -94,6 +103,38 @@ class BookmarkAnalyzer:
         'CANN': 'AI 芯片',
         'CUDA': 'GPU 编程',
         'NPU': 'AI 芯片',
+        'GPU': 'GPU 编程',
+        
+        # 大数据
+        'Hadoop': '大数据',
+        'Spark': '大数据',
+        'Flink': '大数据',
+        'Hive': '大数据',
+        'Hudi': '大数据',
+        '大数据': '大数据',
+        '数据湖': '大数据',
+        '数据仓库': '大数据',
+        
+        # 机器学习
+        'Machine Learning': '机器学习',
+        '机器学习': '机器学习',
+        'Deep Learning': '深度学习',
+        '深度学习': '深度学习',
+        '神经网络': '深度学习',
+        'CNN': '深度学习',
+        'RNN': '深度学习',
+        'LSTM': '深度学习',
+        '强化学习': '机器学习',
+        
+        # Web 开发
+        'Vue': '前端开发',
+        'React': '前端开发',
+        'Angular': '前端开发',
+        'Node.js': '后端开发',
+        'Django': '后端开发',
+        'Flask': '后端开发',
+        'FastAPI': '后端开发',
+        'Spring': '后端开发',
     }
     
     # 技术栈分类
@@ -231,25 +272,42 @@ class BookmarkAnalyzer:
         for bookmark in self.bookmarks:
             title = bookmark['name']
             url = bookmark['url']
-            text = f"{title} {url}"
+            description = bookmark.get('description', '')
+            topics = bookmark.get('topics', [])
+            language = bookmark.get('language', '')
             
+            # 组合所有文本信息
+            text = f"{title} {url} {description}"
+            text_lower = text.lower()
+            
+            # 匹配技能关键词
             for skill, category in self.SKILL_KEYWORDS.items():
-                if skill in text or skill.lower() in text.lower():
+                if skill in text or skill.lower() in text_lower:
                     skill_counts[skill] += 1
-                    self.skills[category].append({
-                        'skill': skill,
-                        'count': skill_counts[skill],
-                        'bookmarks': []
-                    })
+            
+            # 从 topics 提取技能
+            for topic in topics:
+                topic_lower = topic.lower()
+                for skill, category in self.SKILL_KEYWORDS.items():
+                    if skill.lower() == topic_lower or skill.lower() in topic_lower:
+                        skill_counts[skill] += 1
+            
+            # 从编程语言提取
+            if language:
+                lang_upper = language.capitalize()
+                if lang_upper in self.SKILL_KEYWORDS:
+                    skill_counts[lang_upper] += 1
         
-        # 按技能数量排序
+        # 按类别组织技能
+        category_skills = defaultdict(list)
+        for skill, count in skill_counts.items():
+            category = self.SKILL_KEYWORDS.get(skill, '其他')
+            category_skills[category].append({'skill': skill, 'count': count})
+        
+        # 按数量排序
         result = {}
-        for category, skills in self.skills.items():
-            skill_counter = Counter([s['skill'] for s in skills])
-            result[category] = [
-                {'skill': skill, 'count': count}
-                for skill, count in skill_counter.most_common(10)
-            ]
+        for category, skills in category_skills.items():
+            result[category] = sorted(skills, key=lambda x: -x['count'])[:15]
         
         return result
     

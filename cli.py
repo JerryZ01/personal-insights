@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 from datetime import datetime
+from typing import List, Dict
 
 # 导入分析器和数据源
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
@@ -163,6 +164,110 @@ def cmd_github(args):
     print(f"\n💡 提示：可以使用 'python cli.py stats -i {bookmark_path}' 分析 GitHub Stars")
 
 
+def cmd_merge(args):
+    """合并多个数据源"""
+    input_dir = Path(args.input_dir) if args.input_dir else Path(__file__).parent / 'data' / 'input'
+    output_file = args.output or str(input_dir.parent / 'output' / 'merged.json')
+    
+    print(f"📂 扫描输入目录：{input_dir}")
+    
+    # 查找所有 JSON 文件
+    json_files = list(input_dir.glob('*.json'))
+    if not json_files:
+        print("❌ 未找到 JSON 文件")
+        return
+    
+    print(f"🔍 找到 {len(json_files)} 个文件:")
+    for f in json_files:
+        print(f"  - {f.name}")
+    
+    # 合并所有书签数据
+    all_bookmarks = []
+    sources = {}
+    
+    for json_file in json_files:
+        try:
+            with open(json_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # 提取 bookmarks
+            roots = data.get('roots', {})
+            for root_name, root_data in roots.items():
+                if isinstance(root_data, dict) and 'children' in root_data:
+                    children = root_data.get('children', [])
+                    # 过滤出 URL 类型的条目
+                    urls = [c for c in children if c.get('url') or c.get('type') == 'url']
+                    if urls:
+                        all_bookmarks.extend(urls)
+                        sources[json_file.stem] = len(urls)
+                        print(f"  ✅ {json_file.stem}: {len(urls)} 个条目")
+            
+            # 也检查是否是 github_stars 格式
+            if data.get('source') == 'github_stars' and 'stars' in data:
+                stars = data.get('stars', [])
+                if stars:
+                    # 转换为书签格式
+                    source = GitHubStarsSource('', '')
+                    source.stars = stars
+                    bookmarks = source.to_bookmark_format()
+                    all_bookmarks.extend(bookmarks)
+                    sources['github_stars_raw'] = len(bookmarks)
+                    print(f"  ✅ {json_file.stem} (raw stars): {len(bookmarks)} 个条目")
+        
+        except Exception as e:
+            print(f"  ⚠️ {json_file.name}: 读取失败 - {e}")
+    
+    if not all_bookmarks:
+        print("❌ 未找到任何书签数据")
+        return
+    
+    # 去重 (基于 URL)
+    seen_urls = set()
+    unique_bookmarks = []
+    duplicates = 0
+    
+    for bookmark in all_bookmarks:
+        url = bookmark.get('url', '')
+        if url and url not in seen_urls:
+            seen_urls.add(url)
+            unique_bookmarks.append(bookmark)
+        elif url:
+            duplicates += 1
+    
+    print(f"\n📊 合并结果:")
+    print(f"  总条目数：{len(all_bookmarks)}")
+    print(f"  去重后：{len(unique_bookmarks)}")
+    print(f"  重复数：{duplicates}")
+    
+    # 保存合并结果
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    merged_data = {
+        'roots': {
+            'merged_bookmarks': {
+                'name': 'Merged Bookmarks',
+                'children': unique_bookmarks
+            }
+        },
+        'source': 'merged',
+        'merged_at': datetime.now().isoformat(),
+        'sources': sources,
+        'stats': {
+            'total': len(all_bookmarks),
+            'unique': len(unique_bookmarks),
+            'duplicates': duplicates
+        }
+    }
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(merged_data, f, indent=2, ensure_ascii=False)
+    
+    print(f"\n✅ 合并文件已保存：{output_path}")
+    print(f"\n💡 提示：可以使用 'python cli.py stats -i {output_path}' 分析合并后的数据")
+    print(f"💡 提示：可以使用 'python cli.py report -i {output_path} -o report.md' 生成完整报告")
+
+
 def main():
     """主函数"""
     import argparse
@@ -215,6 +320,12 @@ def main():
     p_github.add_argument('--save-raw', help='保存原始 JSON 路径')
     p_github.add_argument('--save-bookmarks', help='保存书签格式路径')
     p_github.set_defaults(func=cmd_github)
+    
+    # merge 命令
+    p_merge = subparsers.add_parser('merge', help='合并多个数据源')
+    p_merge.add_argument('--input-dir', '-i', help='输入目录 (默认 data/input/)')
+    p_merge.add_argument('--output', '-o', help='输出文件路径')
+    p_merge.set_defaults(func=cmd_merge)
     
     args = parser.parse_args()
     
