@@ -140,13 +140,22 @@ class BookmarkAnalyzer:
         current_path = path + [folder_name]
         
         for child in folder.get('children', []):
-            if child.get('type') == 'url':
+            # 支持 Chrome 书签格式 (有 type 字段) 和通用格式 (有 url 字段)
+            is_url = child.get('type') == 'url' or (child.get('url') and child.get('name'))
+            is_folder = child.get('type') == 'folder' or (not child.get('url') and child.get('children'))
+            
+            if is_url:
                 bookmark = {
                     'name': child.get('name', ''),
                     'url': child.get('url', ''),
                     'path': current_path,
                     'domain': self._extract_domain(child.get('url', '')),
                     'date_added': child.get('date_added', ''),
+                    # 支持 GitHub Stars 额外字段
+                    'description': child.get('description', ''),
+                    'language': child.get('language', ''),
+                    'topics': child.get('topics', []),
+                    'source': child.get('source', 'bookmark'),
                 }
                 self.bookmarks.append(bookmark)
                 
@@ -156,7 +165,7 @@ class BookmarkAnalyzer:
                     if date_str:
                         self.timeline[date_str].append(bookmark)
                 
-            elif child.get('type') == 'folder':
+            elif is_folder:
                 self._parse_folder(child, current_path)
     
     def _extract_domain(self, url: str) -> str:
