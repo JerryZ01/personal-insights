@@ -7,6 +7,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Privacy First](https://img.shields.io/badge/privacy-first-green.svg)](https://en.wikipedia.org/wiki/Privacy_by_design)
+[![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Privacy First](https://img.shields.io/badge/privacy-first-green.svg)](https://en.wikipedia.org/wiki/Privacy_by_design)
 
 基于你的全平台收藏数据（浏览器、GitHub、知乎、B 站...），在**本地**生成个人知识图谱、学习轨迹、能力画像和趋势预测。
 
